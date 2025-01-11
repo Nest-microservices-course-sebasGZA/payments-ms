@@ -3,8 +3,10 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 
 import { AppModule } from './app.module';
 import { envs } from './config/envs';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
+  const logger = new Logger('main');
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
   });
@@ -16,8 +18,16 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(envs.port, () => {
-    Logger.log(`payments microservice running on port: ${envs.port}`);
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.NATS,
+    options: {
+      servers: envs.natsServers,
+    },
   });
+
+  await app.startAllMicroservices();
+
+  await app.listen(envs.port);
+  logger.log(`payments microservice running on port: ${envs.port}`);
 }
 bootstrap();
