@@ -25,19 +25,24 @@ export class PaymentsService {
       },
       quantity,
     }));
-    const session = await this.stripe.checkout.sessions.create({
-      payment_intent_data: {
-        metadata: {
-          orderId,
+    const { cancel_url, success_url, url } =
+      await this.stripe.checkout.sessions.create({
+        payment_intent_data: {
+          metadata: {
+            orderId,
+          },
         },
-      },
-      line_items: lineIems,
-      mode: 'payment',
-      success_url: envs.stripeSuccessUrl,
-      cancel_url: envs.stripeCancelUrl,
-    });
+        line_items: lineIems,
+        mode: 'payment',
+        success_url: envs.stripeSuccessUrl,
+        cancel_url: envs.stripeCancelUrl,
+      });
 
-    return session;
+    return {
+      cancel: cancel_url,
+      success: success_url,
+      url,
+    };
   }
 
   async stripeWebhook(req: Request, res: Response) {
