@@ -1,14 +1,20 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
-import { envs } from 'src/config/envs';
-import Stripe from 'stripe';
-import { CreatePaymentSessionDto } from './dtos/create-payment-session.dto';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
+import Stripe from 'stripe';
+
+import { envs } from '../config/envs';
+import { CreatePaymentSessionDto } from './dtos/create-payment-session.dto';
 
 @Injectable()
 export class PaymentsService {
-  private readonly stripe = new Stripe(envs.STRIPE_KEY);
+  private readonly logger = new Logger(PaymentsService.name);
+  private readonly stripe = new Stripe(envs.stripeKey);
 
-  async createPaymentSession({ currency, items }: CreatePaymentSessionDto) {
+  async createPaymentSession({
+    orderId,
+    currency,
+    items,
+  }: CreatePaymentSessionDto) {
     const lineIems = items.map(({ name, quantity, price }) => ({
       price_data: {
         currency,
@@ -21,12 +27,14 @@ export class PaymentsService {
     }));
     const session = await this.stripe.checkout.sessions.create({
       payment_intent_data: {
-        metadata: {},
+        metadata: {
+          orderId,
+        },
       },
       line_items: lineIems,
       mode: 'payment',
-      success_url: 'http://localhost:3003/payments/success',
-      cancel_url: 'http://localhost:3003/payments/cancel',
+      success_url: envs.stripeSuccessUrl,
+      cancel_url: envs.stripeCancelUrl,
     });
 
     return session;
@@ -34,8 +42,34 @@ export class PaymentsService {
 
   async stripeWebhook(req: Request, res: Response) {
     const sig = req.headers['stripe-signature'];
-    return res.status(HttpStatus.OK).json({
-      sig,
-    });
+    const endpointSecret = envs.stripeEndpointSecret;
+    try {
+      const event: Stripe.Event = this.stripe.webhooks.constructEvent(
+        req['rawBody'],
+        sig,
+        endpointSecret,
+      );
+
+      switch (event.type) {
+        case 'charge.succeeded':
+          const chargeSucceeded = event.data.object;
+          console.log({
+            metadata: chargeSucceeded.metadata,
+            orderId: chargeSucceeded.metadata.orderId,
+          });
+          break;
+
+        default:
+          this.logger.log(`Event ${event.type} not handled`);
+      }
+      return res.status(HttpStatus.CREATED).json({
+        sig,
+      });
+    } catch (error) {
+      res
+        .status(HttpStatus.BAD_REQUEST)
+        .send(`Webhook error: ${error.message}`);
+      return;
+    }
   }
 }

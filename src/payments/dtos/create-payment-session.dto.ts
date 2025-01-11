@@ -10,6 +10,9 @@ import { PaymentSessionItemsDto } from './payment-session-items.dto';
 
 export class CreatePaymentSessionDto {
   @IsString()
+  orderId: string;
+
+  @IsString()
   currency: string;
 
   @IsArray()
